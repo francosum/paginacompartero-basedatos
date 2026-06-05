@@ -82,11 +82,73 @@ export interface Database {
         };
         Relationships: [];
       };
+      birds: {
+        Row: {
+          id: string;
+          source_taxonomy: string;
+          source_version: string;
+          source_url: string;
+          taxon_concept_id: string | null;
+          species_code: string | null;
+          sort_order: number | null;
+          category: string;
+          common_name: string;
+          scientific_name: string;
+          authority: string | null;
+          taxonomic_order: string | null;
+          family: string | null;
+          country_text: string | null;
+          range_text: string | null;
+          habitat: string | null;
+          is_extinct: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          source_taxonomy: string;
+          source_version: string;
+          source_url: string;
+          taxon_concept_id?: string | null;
+          species_code?: string | null;
+          sort_order?: number | null;
+          category?: string;
+          common_name: string;
+          scientific_name: string;
+          authority?: string | null;
+          taxonomic_order?: string | null;
+          family?: string | null;
+          country_text?: string | null;
+          range_text?: string | null;
+          habitat?: string | null;
+          is_extinct?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          source_taxonomy?: string;
+          source_version?: string;
+          source_url?: string;
+          taxon_concept_id?: string | null;
+          species_code?: string | null;
+          sort_order?: number | null;
+          category?: string;
+          common_name?: string;
+          scientific_name?: string;
+          authority?: string | null;
+          taxonomic_order?: string | null;
+          family?: string | null;
+          country_text?: string | null;
+          range_text?: string | null;
+          habitat?: string | null;
+          is_extinct?: boolean;
+        };
+        Relationships: [];
+      };
       sightings: {
         Row: {
           id: string;
           user_id: string;
-          species_id: string;
+          species_id: string | null;
+          bird_id: string | null;
           photo_url: string;
           storage_path: string;
           location_name: string;
@@ -99,7 +161,8 @@ export interface Database {
         Insert: {
           id?: string;
           user_id: string;
-          species_id: string;
+          species_id?: string | null;
+          bird_id?: string | null;
           photo_url: string;
           storage_path: string;
           location_name: string;
@@ -110,7 +173,8 @@ export interface Database {
           created_at?: string;
         };
         Update: {
-          species_id?: string;
+          species_id?: string | null;
+          bird_id?: string | null;
           photo_url?: string;
           storage_path?: string;
           location_name?: string;

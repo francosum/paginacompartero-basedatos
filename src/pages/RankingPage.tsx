@@ -3,6 +3,7 @@ import { EmptyState } from "../components/shared/EmptyState";
 import { SkeletonCards } from "../components/shared/Skeleton";
 import { Avatar } from "../components/shared/Avatar";
 import type { FeedSighting, Profile } from "../types/models";
+import { catalogBirdKey, sightingCatalogBird } from "../utils/birds";
 import { displayName } from "../utils/format";
 
 interface RankingPageProps {
@@ -79,19 +80,22 @@ export function RankingPage({
           {ranking.photosByLikes.length === 0 ? (
             <p className="muted-text">Todavia no hay fotos con likes.</p>
           ) : (
-            ranking.photosByLikes.slice(0, 8).map(({ sighting, count }, index) => (
-              <button
-                className="photo-rank-row"
-                key={sighting.id}
-                type="button"
-                onClick={() => sighting.bird_species && onOpenSpecies(sighting.bird_species.id)}
-              >
-                <span>{index + 1}</span>
-                <img src={sighting.photo_url} alt={sighting.bird_species?.common_name ?? "Foto"} />
-                <strong>{sighting.bird_species?.common_name ?? "Especie no disponible"}</strong>
-                <small>{count} likes</small>
-              </button>
-            ))
+            ranking.photosByLikes.slice(0, 8).map(({ sighting, count }, index) => {
+              const bird = sightingCatalogBird(sighting);
+              return (
+                <button
+                  className="photo-rank-row"
+                  key={sighting.id}
+                  type="button"
+                  onClick={() => bird && onOpenSpecies(catalogBirdKey(bird))}
+                >
+                  <span>{index + 1}</span>
+                  <img src={sighting.photo_url} alt={bird?.common_name ?? "Foto"} />
+                  <strong>{bird?.common_name ?? "Especie no disponible"}</strong>
+                  <small>{count} likes</small>
+                </button>
+              );
+            })
           )}
         </section>
       </div>

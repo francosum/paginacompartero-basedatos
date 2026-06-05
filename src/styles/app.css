@@ -771,10 +771,10 @@ label {
 }
 
 .filters-bar {
-  align-items: center;
+  align-items: end;
   display: grid;
   gap: 12px;
-  grid-template-columns: minmax(260px, 1fr) minmax(180px, 0.32fr) minmax(180px, 0.32fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .search-field {
@@ -790,6 +790,47 @@ label {
 
 .search-field input {
   padding-left: 38px;
+}
+
+.catalog-toolbar {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.catalog-toolbar > span {
+  color: var(--ink-soft);
+  font-weight: 800;
+}
+
+.catalog-toolbar label {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+}
+
+.catalog-toolbar select {
+  min-height: 38px;
+  min-width: 86px;
+}
+
+.pagination-controls {
+  align-items: center;
+  display: inline-flex;
+  gap: 10px;
+}
+
+.pagination-controls strong {
+  color: var(--ink-soft);
+  min-width: 72px;
+  text-align: center;
 }
 
 .species-layout {
@@ -877,6 +918,10 @@ label {
 .detail-list div {
   border-bottom: 1px solid var(--line);
   padding-bottom: 10px;
+}
+
+.detail-list .wide-detail {
+  grid-column: 1 / -1;
 }
 
 .detail-list dt {

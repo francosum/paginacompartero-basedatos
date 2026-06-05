@@ -1,17 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-import type { ConservationStatus } from "../types/database";
+import type { ConservationStatus, Database } from "../types/database";
 import type {
+  Bird,
   BirdSpecies,
+  CatalogBird,
+  CatalogSource,
   FeedSighting,
   PlatformStats,
   Profile,
 } from "../types/models";
+import {
+  legacySpeciesToCatalog,
+  officialBirdToCatalog,
+  sightingSpeciesIdentity,
+} from "../utils/birds";
 import { safeFileName, sanitizeComment } from "../utils/format";
 
 interface CreateSightingPayload {
   userId: string;
-  speciesId: string;
+  catalogBirdId: string;
+  catalog: CatalogSource;
   photo: File;
   locationName: string;
   observedAt: string;
@@ -29,15 +38,121 @@ interface CreateSpeciesPayload {
   source_url: string;
 }
 
+type SchemaError = {
+  code?: string;
+  message?: string;
+};
+
+type ComparteroClient = NonNullable<typeof supabase>;
+
 const emptyStats: PlatformStats = {
   sightings: 0,
   species: 0,
   profiles: 0,
 };
 
+const SCHEMA_CACHE_ERROR_CODES = new Set(["PGRST200", "PGRST202", "PGRST204", "PGRST205"]);
+
+function isMissingSchemaError(error: SchemaError | null) {
+  if (!error) return false;
+  const message = error.message?.toLowerCase() ?? "";
+  return (
+    SCHEMA_CACHE_ERROR_CODES.has(error.code ?? "") ||
+    message.includes("schema cache") ||
+    message.includes("could not find") ||
+    message.includes("relationship") ||
+    message.includes("column")
+  );
+}
+
+async function fetchOfficialBirds(client: ComparteroClient) {
+  const rows: Bird[] = [];
+  const pageSize = 1000;
+  const maxRows = 20000;
+
+  for (let from = 0; from < maxRows; from += pageSize) {
+    const { data, error } = await client
+      .from("birds")
+      .select("*")
+      .order("common_name")
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      if (isMissingSchemaError(error)) return { rows: [], available: false };
+      throw error;
+    }
+
+    const page = (data ?? []) as Bird[];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  return { rows, available: true };
+}
+
+function sightingsSelect(includeOfficialBirds: boolean, includeSaved: boolean) {
+  const saved = includeSaved ? ", saved_sightings(*)" : "";
+  const official = includeOfficialBirds ? "birds(*)," : "";
+
+  return `
+    *,
+    profiles(*),
+    ${official}
+    bird_species(*),
+    likes(*),
+    comments(*, profiles(*))
+    ${saved}
+  `;
+}
+
+async function fetchSightings(client: ComparteroClient, userId?: string | null) {
+  const includeSaved = Boolean(userId);
+
+  let result = await client
+    .from("sightings")
+    .select(sightingsSelect(true, includeSaved))
+    .order("created_at", { ascending: false })
+    .limit(150);
+
+  if (result.error && isMissingSchemaError(result.error)) {
+    result = await client
+      .from("sightings")
+      .select(sightingsSelect(false, includeSaved))
+      .order("created_at", { ascending: false })
+      .limit(150);
+  }
+
+  if (result.error) throw result.error;
+
+  return ((result.data ?? []) as unknown as FeedSighting[]).map((item) => ({
+    ...item,
+    birds: item.birds ?? null,
+    bird_species: item.bird_species ?? null,
+    saved_sightings: item.saved_sightings ?? [],
+  }));
+}
+
+function buildCatalog(
+  officialBirds: Bird[],
+  legacySpecies: BirdSpecies[],
+  sightings: FeedSighting[],
+): CatalogBird[] {
+  const officialCatalog = officialBirds.map(officialBirdToCatalog);
+  const legacyCatalog = legacySpecies.map(legacySpeciesToCatalog);
+
+  if (officialCatalog.length === 0) return legacyCatalog;
+
+  const legacyIdsStillUsed = new Set(
+    sightings.map((sighting) => sighting.species_id).filter(Boolean) as string[],
+  );
+  const legacyStillVisible = legacyCatalog.filter((item) => legacyIdsStillUsed.has(item.id));
+
+  return [...officialCatalog, ...legacyStillVisible];
+}
+
 export function useComparteroData(userId?: string | null) {
   const [sightings, setSightings] = useState<FeedSighting[]>([]);
-  const [species, setSpecies] = useState<BirdSpecies[]>([]);
+  const [species, setSpecies] = useState<CatalogBird[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [stats, setStats] = useState<PlatformStats>(emptyStats);
   const [loading, setLoading] = useState(true);
@@ -59,61 +174,43 @@ export function useComparteroData(userId?: string | null) {
     setError(null);
 
     try {
-      const sightingsSelect = userId
-        ? `
-            *,
-            profiles(*),
-            bird_species(*),
-            likes(*),
-            comments(*, profiles(*)),
-            saved_sightings(*)
-          `
-        : `
-            *,
-            profiles(*),
-            bird_species(*),
-            likes(*),
-            comments(*, profiles(*))
-          `;
-
+      const client = supabase;
       const [
-        sightingsResult,
-        speciesResult,
+        sightingsData,
+        officialBirds,
+        legacySpeciesResult,
         profilesResult,
         sightingsCount,
-        speciesCount,
+        legacySpeciesCount,
         profilesCount,
       ] = await Promise.all([
-        supabase
-          .from("sightings")
-          .select(sightingsSelect)
-          .order("created_at", { ascending: false })
-          .limit(150),
-        supabase.from("bird_species").select("*").order("common_name"),
-        supabase.from("profiles").select("*").order("created_at", { ascending: false }),
-        supabase.from("sightings").select("id", { count: "exact", head: true }),
-        supabase.from("bird_species").select("id", { count: "exact", head: true }),
-        supabase.from("profiles").select("id", { count: "exact", head: true }),
+        fetchSightings(client, userId),
+        fetchOfficialBirds(client),
+        client.from("bird_species").select("*").order("common_name"),
+        client.from("profiles").select("*").order("created_at", { ascending: false }),
+        client.from("sightings").select("id", { count: "exact", head: true }),
+        client.from("bird_species").select("id", { count: "exact", head: true }),
+        client.from("profiles").select("id", { count: "exact", head: true }),
       ]);
 
-      if (sightingsResult.error) throw sightingsResult.error;
-      if (speciesResult.error) throw speciesResult.error;
+      if (legacySpeciesResult.error) throw legacySpeciesResult.error;
       if (profilesResult.error) throw profilesResult.error;
       if (sightingsCount.error) throw sightingsCount.error;
-      if (speciesCount.error) throw speciesCount.error;
+      if (legacySpeciesCount.error) throw legacySpeciesCount.error;
       if (profilesCount.error) throw profilesCount.error;
 
-      setSightings(
-        ((sightingsResult.data ?? []) as unknown as FeedSighting[]).map((item) => ({
-          ...item,
-          saved_sightings: item.saved_sightings ?? [],
-        })),
-      );
-      setSpecies(speciesResult.data ?? []);
+      const legacySpecies = (legacySpeciesResult.data ?? []) as BirdSpecies[];
+      const catalog = buildCatalog(officialBirds.rows, legacySpecies, sightingsData);
+
+      setSightings(sightingsData);
+      setSpecies(catalog);
       setProfiles(profilesResult.data ?? []);
       setStats({
         sightings: sightingsCount.count ?? 0,
-        species: speciesCount.count ?? 0,
+        species:
+          officialBirds.available && officialBirds.rows.length > 0
+            ? officialBirds.rows.length
+            : legacySpeciesCount.count ?? 0,
         profiles: profilesCount.count ?? 0,
       });
     } catch (err) {
@@ -173,6 +270,25 @@ export function useComparteroData(userId?: string | null) {
       throw new Error("Completa todos los campos de la especie.");
     }
 
+    const officialPayload: Database["public"]["Tables"]["birds"]["Insert"] = {
+      source_taxonomy: cleanPayload.source,
+      source_version: "manual",
+      source_url: cleanPayload.source_url,
+      category: "species",
+      common_name: cleanPayload.common_name,
+      scientific_name: cleanPayload.scientific_name,
+      family: cleanPayload.family,
+      is_extinct: cleanPayload.conservation_status === "EX",
+    };
+
+    const officialInsert = await supabase.from("birds").insert(officialPayload);
+    if (!officialInsert.error) {
+      await refresh();
+      return;
+    }
+
+    if (!isMissingSchemaError(officialInsert.error)) throw officialInsert.error;
+
     const { error: insertError } = await supabase.from("bird_species").insert(cleanPayload);
     if (insertError) throw insertError;
     await refresh();
@@ -182,6 +298,7 @@ export function useComparteroData(userId?: string | null) {
     async (payload: CreateSightingPayload) => {
       if (!supabase) throw new Error("Configura Supabase para publicar avistamientos.");
       if (!payload.userId) throw new Error("Inicia sesion para publicar.");
+      if (!payload.catalogBirdId) throw new Error("Selecciona una especie del catalogo.");
       if (!payload.photo.type.startsWith("image/")) {
         throw new Error("La foto debe ser una imagen.");
       }
@@ -198,10 +315,10 @@ export function useComparteroData(userId?: string | null) {
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage.from("sighting-photos").getPublicUrl(path);
-
-      const { error: insertError } = await supabase.from("sightings").insert({
+      const insertPayload: Database["public"]["Tables"]["sightings"]["Insert"] = {
         user_id: payload.userId,
-        species_id: payload.speciesId,
+        species_id: payload.catalog === "bird_species" ? payload.catalogBirdId : null,
+        bird_id: payload.catalog === "birds" ? payload.catalogBirdId : null,
         photo_url: data.publicUrl,
         storage_path: path,
         location_name: payload.locationName.trim(),
@@ -209,7 +326,9 @@ export function useComparteroData(userId?: string | null) {
         longitude: payload.longitude ?? null,
         notes: payload.notes?.trim() || null,
         observed_at: new Date(payload.observedAt).toISOString(),
-      });
+      };
+
+      const { error: insertError } = await supabase.from("sightings").insert(insertPayload);
 
       if (insertError) {
         await supabase.storage.from("sighting-photos").remove([path]);
@@ -317,7 +436,8 @@ export function useComparteroData(userId?: string | null) {
 
       const speciesRank =
         bySpecies.get(sighting.user_id) ?? { profile, species: new Set<string>() };
-      speciesRank.species.add(sighting.species_id);
+      const speciesIdentity = sightingSpeciesIdentity(sighting);
+      if (speciesIdentity) speciesRank.species.add(speciesIdentity);
       bySpecies.set(sighting.user_id, speciesRank);
     });
 

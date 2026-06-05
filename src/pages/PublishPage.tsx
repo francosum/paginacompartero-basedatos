@@ -2,18 +2,20 @@ import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { Camera, DatabaseZap, ImagePlus, Search } from "lucide-react";
 import { EmptyState } from "../components/shared/EmptyState";
-import type { BirdSpecies } from "../types/models";
+import type { CatalogBird, CatalogSource } from "../types/models";
+import { catalogBirdKey } from "../utils/birds";
 import { useToast } from "../hooks/useToast";
 
 interface PublishPageProps {
   user: User | null;
   configured: boolean;
-  species: BirdSpecies[];
+  species: CatalogBird[];
   onOpenAuth: () => void;
   onOpenSpeciesManager: () => void;
   onCreateSighting: (payload: {
     userId: string;
-    speciesId: string;
+    catalogBirdId: string;
+    catalog: CatalogSource;
     photo: File;
     locationName: string;
     observedAt: string;
@@ -34,7 +36,7 @@ export function PublishPage({
   const [photo, setPhoto] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [speciesQuery, setSpeciesQuery] = useState("");
-  const [selectedSpecies, setSelectedSpecies] = useState("");
+  const [selectedSpeciesKey, setSelectedSpeciesKey] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const { addToast } = useToast();
 
@@ -72,12 +74,19 @@ export function PublishPage({
     const form = new FormData(event.currentTarget);
     const latitude = String(form.get("latitude") || "").trim();
     const longitude = String(form.get("longitude") || "").trim();
+    const selectedSpecies = species.find((item) => catalogBirdKey(item) === selectedSpeciesKey);
+
+    if (!selectedSpecies) {
+      addToast("Selecciona una especie del catalogo.", "error");
+      return;
+    }
 
     setSubmitting(true);
     try {
       await onCreateSighting({
         userId: user.id,
-        speciesId: selectedSpecies,
+        catalogBirdId: selectedSpecies.id,
+        catalog: selectedSpecies.catalog,
         photo,
         locationName: String(form.get("locationName")),
         observedAt: String(form.get("observedAt")),
@@ -90,7 +99,7 @@ export function PublishPage({
       event.currentTarget.reset();
       setPhoto(null);
       setPreview(null);
-      setSelectedSpecies("");
+      setSelectedSpeciesKey("");
       setSpeciesQuery("");
     } catch (error) {
       addToast(error instanceof Error ? error.message : "No se pudo publicar.", "error");
@@ -169,13 +178,14 @@ export function PublishPage({
             Especie
             <select
               required
-              value={selectedSpecies}
-              onChange={(event) => setSelectedSpecies(event.target.value)}
+              value={selectedSpeciesKey}
+              onChange={(event) => setSelectedSpeciesKey(event.target.value)}
             >
-              <option value="">Seleccionar especie verificada</option>
+              <option value="">Seleccionar especie del catalogo</option>
               {filteredSpecies.map((item) => (
-                <option value={item.id} key={item.id}>
+                <option value={catalogBirdKey(item)} key={catalogBirdKey(item)}>
                   {item.common_name} - {item.scientific_name}
+                  {item.catalog === "birds" ? " (oficial)" : " (verificada)"}
                 </option>
               ))}
             </select>

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Avatar } from "./shared/Avatar";
 import type { FeedSighting } from "../types/models";
+import { catalogBirdKey, sightingCatalogBird } from "../utils/birds";
 import { conservationLabel, displayName, formatDate } from "../utils/format";
 import { useToast } from "../hooks/useToast";
 
@@ -48,7 +49,7 @@ export function SightingCard({
     userId && sighting.saved_sightings?.some((item) => item.user_id === userId),
   );
   const ownPost = Boolean(userId && sighting.user_id === userId);
-  const species = sighting.bird_species;
+  const species = sightingCatalogBird(sighting);
   const profile = sighting.profiles;
 
   async function guarded(action: () => Promise<void>) {
@@ -126,7 +127,7 @@ export function SightingCard({
           <button
             className="species-link"
             type="button"
-            onClick={() => onOpenSpecies(species.id)}
+            onClick={() => onOpenSpecies(catalogBirdKey(species))}
           >
             <span>{species.common_name}</span>
             <em>{species.scientific_name}</em>
@@ -151,7 +152,13 @@ export function SightingCard({
 
         {species && (
           <div className="source-row">
-            <span>{conservationLabel(species.conservation_status)}</span>
+            <span>
+              {species.conservation_status
+                ? conservationLabel(species.conservation_status)
+                : species.catalog === "birds"
+                  ? "Catalogo oficial"
+                  : "Especie verificada"}
+            </span>
             <a href={species.source_url} target="_blank" rel="noreferrer">
               {species.source}
               <ExternalLink size={12} />

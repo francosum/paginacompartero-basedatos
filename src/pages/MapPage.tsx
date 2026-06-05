@@ -3,13 +3,14 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { DatabaseZap, MapPinned } from "lucide-react";
 import { EmptyState } from "../components/shared/EmptyState";
-import type { BirdSpecies, FeedSighting, Profile } from "../types/models";
+import type { CatalogBird, FeedSighting, Profile } from "../types/models";
+import { catalogBirdKey, sightingCatalogBird, sightingCatalogKey } from "../utils/birds";
 import { displayName, formatDate } from "../utils/format";
 
 interface MapPageProps {
   configured: boolean;
   sightings: FeedSighting[];
-  species: BirdSpecies[];
+  species: CatalogBird[];
   profiles: Profile[];
   onOpenSpecies: (speciesId: string) => void;
   onOpenProfile: (profileId: string) => void;
@@ -31,7 +32,7 @@ export function MapPage({
     const zoneQuery = zone.toLowerCase().trim();
     return sightings.filter((item) => {
       const hasCoords = typeof item.latitude === "number" && typeof item.longitude === "number";
-      const matchesSpecies = speciesId === "all" || item.species_id === speciesId;
+      const matchesSpecies = speciesId === "all" || sightingCatalogKey(item) === speciesId;
       const matchesProfile = profileId === "all" || item.user_id === profileId;
       const matchesZone =
         !zoneQuery ||
@@ -65,7 +66,7 @@ export function MapPage({
         <select value={speciesId} onChange={(event) => setSpeciesId(event.target.value)}>
           <option value="all">Todas las especies</option>
           {species.map((item) => (
-            <option value={item.id} key={item.id}>
+            <option value={catalogBirdKey(item)} key={catalogBirdKey(item)}>
               {item.common_name}
             </option>
           ))}
@@ -138,7 +139,7 @@ function LeafletSightingsMap({
       const point: L.LatLngExpression = [sighting.latitude, sighting.longitude];
       points.push(point);
 
-      const species = sighting.bird_species;
+      const species = sightingCatalogBird(sighting);
       const profile = sighting.profiles;
       const popup = document.createElement("div");
       popup.className = "map-popup";
@@ -170,7 +171,7 @@ function LeafletSightingsMap({
       speciesButton.type = "button";
       speciesButton.textContent = "Especie";
       speciesButton.addEventListener("click", () => {
-        if (species?.id) onOpenSpecies(species.id);
+        if (species) onOpenSpecies(catalogBirdKey(species));
       });
 
       actions.append(profileButton, speciesButton);

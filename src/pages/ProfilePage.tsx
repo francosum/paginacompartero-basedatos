@@ -3,6 +3,7 @@ import { CalendarDays, DatabaseZap, Image, UserRound } from "lucide-react";
 import { EmptyState } from "../components/shared/EmptyState";
 import { Avatar } from "../components/shared/Avatar";
 import type { FeedSighting, Profile } from "../types/models";
+import { sightingCatalogBird, sightingCatalogKey } from "../utils/birds";
 import { displayName, formatDate } from "../utils/format";
 import { useToast } from "../hooks/useToast";
 
@@ -39,7 +40,8 @@ export function ProfilePage({
   const speciesObserved = useMemo(() => {
     const map = new Map<string, FeedSighting>();
     userSightings.forEach((sighting) => {
-      if (!map.has(sighting.species_id)) map.set(sighting.species_id, sighting);
+      const key = sightingCatalogKey(sighting);
+      if (key && !map.has(key)) map.set(key, sighting);
     });
     return Array.from(map.values());
   }, [userSightings]);
@@ -188,12 +190,15 @@ export function ProfilePage({
             <p className="muted-text">No hay fotos publicadas todavia.</p>
           ) : (
             <div className="mini-gallery">
-              {userSightings.map((sighting) => (
-                <figure key={sighting.id}>
-                  <img src={sighting.photo_url} alt={sighting.bird_species?.common_name ?? "Foto"} />
-                  <figcaption>{sighting.bird_species?.common_name ?? "Especie no disponible"}</figcaption>
-                </figure>
-              ))}
+              {userSightings.map((sighting) => {
+                const bird = sightingCatalogBird(sighting);
+                return (
+                  <figure key={sighting.id}>
+                    <img src={sighting.photo_url} alt={bird?.common_name ?? "Foto"} />
+                    <figcaption>{bird?.common_name ?? "Especie no disponible"}</figcaption>
+                  </figure>
+                );
+              })}
             </div>
           )}
         </div>
@@ -204,16 +209,20 @@ export function ProfilePage({
             <p className="muted-text">No hay especies observadas todavia.</p>
           ) : (
             <div className="species-chip-list">
-              {speciesObserved.map((sighting) => (
-                <button
-                  className="species-chip"
-                  key={sighting.species_id}
-                  type="button"
-                  onClick={() => onOpenSpecies(sighting.species_id)}
-                >
-                  {sighting.bird_species?.common_name ?? "Especie no disponible"}
-                </button>
-              ))}
+              {speciesObserved.map((sighting) => {
+                const key = sightingCatalogKey(sighting);
+                const bird = sightingCatalogBird(sighting);
+                return (
+                  <button
+                    className="species-chip"
+                    key={key ?? sighting.id}
+                    type="button"
+                    onClick={() => key && onOpenSpecies(key)}
+                  >
+                    {bird?.common_name ?? "Especie no disponible"}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
