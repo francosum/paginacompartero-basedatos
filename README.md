@@ -1,4 +1,5 @@
 # Compartero
+LINK: https://compartero.site/
 
 Compartero es una plataforma web real para observadores de aves. La app usa React, TypeScript,
 Vite y Supabase para autenticacion, base de datos, Storage y seguridad con Row Level Security.
