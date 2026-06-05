@@ -10,6 +10,25 @@ interface AuthDialogProps {
 
 type Mode = "login" | "register" | "reset";
 
+function authMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "No se pudo completar la accion.";
+  const lower = message.toLowerCase();
+
+  if (lower.includes("email not confirmed")) {
+    return "Tenes que confirmar tu correo antes de iniciar sesion. Revisa tu bandeja de entrada o spam.";
+  }
+
+  if (lower.includes("invalid login credentials")) {
+    return "Correo o contrasena incorrectos.";
+  }
+
+  if (lower.includes("user already registered") || lower.includes("already registered")) {
+    return "Ese correo ya esta registrado. Proba iniciar sesion.";
+  }
+
+  return message;
+}
+
 export function AuthDialog({ open, onClose }: AuthDialogProps) {
   const [mode, setMode] = useState<Mode>("login");
   const [submitting, setSubmitting] = useState(false);
@@ -48,7 +67,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
         setMode("login");
       }
     } catch (error) {
-      addToast(error instanceof Error ? error.message : "No se pudo completar la accion.", "error");
+      addToast(authMessage(error), "error");
     } finally {
       setSubmitting(false);
     }

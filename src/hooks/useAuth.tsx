@@ -42,6 +42,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const usernameFromUser = (authUser: User) => {
+    const raw =
+      String(authUser.user_metadata?.username ?? "") ||
+      String(authUser.email?.split("@")[0] ?? "") ||
+      `observador_${authUser.id.slice(0, 8)}`;
+
+    const clean = raw
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9_]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .toLowerCase()
+      .slice(0, 24);
+
+    return clean.length >= 3 ? clean : `observador_${authUser.id.slice(0, 8)}`;
+  };
+
+  const profilePayloadFromUser = (authUser: User, withUniqueSuffix = false) => {
+    const baseUsername = usernameFromUser(authUser);
+    const suffix = authUser.id.slice(0, 6);
+    const username = withUniqueSuffix
+      ? `${baseUsername.slice(0, 25)}_${suffix}`
+      : baseUsername;
+
+    return {
+      id: authUser.id,
+      username,
+      full_name:
+        String(authUser.user_metadata?.full_name ?? "").trim() ||
+        String(authUser.email?.split("@")[0] ?? "").trim() ||
+        "Observador",
+      country: String(authUser.user_metadata?.country ?? "").trim() || null,
+    };
+  };
+
+  const ensureProfile = useCallback(async (authUser: User) => {
+    if (!supabase) return null;
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", authUser.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (data) {
+      setProfile(data);
+      return data;
+    }
+
+    const firstAttempt = await supabase
+      .from("profiles")
+      .insert(profilePayloadFromUser(authUser))
+      .select("*")
+      .single();
+
+    if (!firstAttempt.error) {
+      setProfile(firstAttempt.data);
+      return firstAttempt.data;
+    }
+
+    const secondAttempt = await supabase
+      .from("profiles")
+      .insert(profilePayloadFromUser(authUser, true))
+      .select("*")
+      .single();
+
+    if (secondAttempt.error) throw secondAttempt.error;
+    setProfile(secondAttempt.data);
+    return secondAttempt.data;
+  }, []);
+
   const loadProfile = useCallback(async (userId: string) => {
     if (!supabase) return null;
 
@@ -75,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(data.session);
         setUser(data.session?.user ?? null);
         if (data.session?.user) {
-          await loadProfile(data.session.user.id);
+          await ensureProfile(data.session.user);
         }
       } catch {
         setProfile(null);
@@ -90,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
       if (nextSession?.user) {
-        window.setTimeout(() => void loadProfile(nextSession.user.id), 0);
+        window.setTimeout(() => void ensureProfile(nextSession.user), 0);
       } else {
         setProfile(null);
       }
@@ -100,31 +173,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [loadProfile]);
+  }, [ensureProfile]);
 
   const signUp = useCallback(async (payload: SignUpPayload) => {
     if (!supabase) throw new Error("Configura Supabase para activar usuarios reales.");
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: payload.email,
       password: payload.password,
       options: {
         data: {
           full_name: payload.fullName,
-        username: payload.username.toLowerCase(),
+          username: payload.username.toLowerCase(),
           country: payload.country,
         },
       },
     });
 
     if (error) throw error;
-  }, []);
+    if (data.session?.user) {
+      await ensureProfile(data.session.user);
+    }
+  }, [ensureProfile]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!supabase) throw new Error("Configura Supabase para iniciar sesion.");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
-  }, []);
+    if (data.user) {
+      await ensureProfile(data.user);
+    }
+  }, [ensureProfile]);
 
   const signOut = useCallback(async () => {
     if (!supabase) return;
