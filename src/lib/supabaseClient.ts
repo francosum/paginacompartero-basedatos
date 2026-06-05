@@ -1,8 +1,13 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../types/database";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+const fallbackSupabaseUrl = "https://xvfhankyffjgdhvvifjb.supabase.co";
+const fallbackSupabaseAnonKey = "sb_publishable_4XZj8G9M0iEm9d3XqmFavA_jIqiXfu2";
+
+const supabaseUrl =
+  import.meta.env.VITE_SUPABASE_URL?.trim() || fallbackSupabaseUrl;
+const supabaseAnonKey =
+  import.meta.env.VITE_SUPABASE_ANON_KEY?.trim() || fallbackSupabaseAnonKey;
 
 const isPlaceholder = (value?: string) =>
   !value ||
