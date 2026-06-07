@@ -18,6 +18,7 @@ import { catalogBirdKey, sightingCatalogKey } from "../utils/birds";
 import { conservationLabel, formatDate } from "../utils/format";
 import { useToast } from "../hooks/useToast";
 import { optimizedStorageImageUrl } from "../utils/images";
+import { useTaxonPhotos } from "../hooks/useTaxonPhotos";
 
 interface SpeciesPageProps {
   configured: boolean;
@@ -122,11 +123,6 @@ export function SpeciesPage({
     () => filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize),
     [currentPage, filtered, pageSize],
   );
-
-  useEffect(() => {
-    setPage(1);
-  }, [country, family, habitat, pageSize, query, sourceFilter]);
-
   const selectedSpecies =
     species.find(
       (item) => catalogBirdKey(item) === selectedSpeciesId || item.id === selectedSpeciesId,
@@ -134,10 +130,31 @@ export function SpeciesPage({
     pageItems[0] ??
     filtered[0] ??
     null;
+  const taxonPhotoItems = useMemo(
+    () =>
+      selectedSpecies
+        ? [...pageItems, selectedSpecies].filter(
+            (item, index, items) =>
+              items.findIndex((candidate) => catalogBirdKey(candidate) === catalogBirdKey(item)) ===
+              index,
+          )
+        : pageItems,
+    [pageItems, selectedSpecies],
+  );
+  const taxonPhotos = useTaxonPhotos(taxonPhotoItems);
+
+  useEffect(() => {
+    setPage(1);
+  }, [country, family, habitat, pageSize, query, sourceFilter]);
 
   const selectedKey = selectedSpecies ? catalogBirdKey(selectedSpecies) : null;
   const selectedSightings = selectedKey ? sightingGroups.get(selectedKey) ?? [] : [];
-  const selectedCoverPhoto = selectedSpecies?.image_url ?? selectedSightings[0]?.photo_url ?? null;
+  const selectedTaxonPhoto = selectedKey ? taxonPhotos[selectedKey] ?? null : null;
+  const selectedCoverPhoto =
+    selectedSpecies?.image_url ??
+    selectedTaxonPhoto?.mediumUrl ??
+    selectedSightings[0]?.photo_url ??
+    null;
 
   async function handleCreateSpecies(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -372,7 +389,9 @@ export function SpeciesPage({
                   const key = catalogBirdKey(item);
                   const sightingsForSpecies = sightingGroups.get(key) ?? [];
                   const count = sightingsForSpecies.length;
-                  const coverPhoto = item.image_url ?? sightingsForSpecies[0]?.photo_url;
+                  const taxonPhoto = taxonPhotos[key] ?? null;
+                  const coverPhoto =
+                    item.image_url ?? taxonPhoto?.squareUrl ?? sightingsForSpecies[0]?.photo_url;
                   const initial = item.common_name.charAt(0).toUpperCase();
                   return (
                     <button
@@ -438,6 +457,19 @@ export function SpeciesPage({
                         <strong>{selectedSightings.length} avistamientos</strong>
                       </div>
                     </div>
+                    {selectedTaxonPhoto && !selectedSpecies.image_url && (
+                      <a
+                        className="detail-photo-credit"
+                        href={selectedTaxonPhoto.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Foto: {selectedTaxonPhoto.sourceName}
+                        {selectedTaxonPhoto.attribution
+                          ? ` - ${selectedTaxonPhoto.attribution}`
+                          : ""}
+                      </a>
+                    )}
                     <div className="detail-heading">
                       <span className="status-badge">
                         {selectedSpecies.catalog === "birds" ? "Oficial" : "Verificada"}

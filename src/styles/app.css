@@ -1212,6 +1212,22 @@ label {
   opacity: 0.82;
 }
 
+.detail-photo-credit {
+  color: var(--muted);
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 700;
+  margin: -8px 0 16px;
+  overflow: hidden;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-photo-credit:hover {
+  color: var(--green-2);
+}
+
 .detail-heading {
   display: grid;
   gap: 6px;
