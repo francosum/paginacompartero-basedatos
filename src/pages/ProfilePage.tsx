@@ -6,6 +6,7 @@ import type { FeedSighting, Profile } from "../types/models";
 import { sightingCatalogBird, sightingCatalogKey } from "../utils/birds";
 import { displayName, formatDate } from "../utils/format";
 import { useToast } from "../hooks/useToast";
+import { optimizedStorageImageUrl } from "../utils/images";
 
 interface ProfilePageProps {
   configured: boolean;
@@ -194,7 +195,17 @@ export function ProfilePage({
                 const bird = sightingCatalogBird(sighting);
                 return (
                   <figure key={sighting.id}>
-                    <img src={sighting.photo_url} alt={bird?.common_name ?? "Foto"} />
+                    <img
+                      src={optimizedStorageImageUrl(sighting.photo_url, {
+                        width: 260,
+                        height: 260,
+                        quality: 70,
+                        resize: "cover",
+                      })}
+                      alt={bird?.common_name ?? "Foto"}
+                      loading="lazy"
+                      decoding="async"
+                    />
                     <figcaption>{bird?.common_name ?? "Especie no disponible"}</figcaption>
                   </figure>
                 );

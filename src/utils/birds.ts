@@ -19,6 +19,9 @@ export function officialBirdToCatalog(row: Bird): CatalogBird {
     country_text: row.country_text,
     range_text: row.range_text,
     habitat: row.habitat,
+    image_url: row.image_url,
+    image_attribution: row.image_attribution,
+    image_source_url: row.image_source_url,
     is_extinct: row.is_extinct,
     created_at: row.created_at,
   };

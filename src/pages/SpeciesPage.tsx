@@ -1,5 +1,15 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, DatabaseZap, ExternalLink, Plus, Search } from "lucide-react";
+import {
+  Activity,
+  ChevronLeft,
+  ChevronRight,
+  DatabaseZap,
+  ExternalLink,
+  Images,
+  Layers,
+  Plus,
+  Search,
+} from "lucide-react";
 import { EmptyState } from "../components/shared/EmptyState";
 import { SkeletonCards } from "../components/shared/Skeleton";
 import type { ConservationStatus } from "../types/database";
@@ -7,6 +17,7 @@ import type { CatalogBird, CatalogSource, FeedSighting } from "../types/models";
 import { catalogBirdKey, sightingCatalogKey } from "../utils/birds";
 import { conservationLabel, formatDate } from "../utils/format";
 import { useToast } from "../hooks/useToast";
+import { optimizedStorageImageUrl } from "../utils/images";
 
 interface SpeciesPageProps {
   configured: boolean;
@@ -57,15 +68,22 @@ export function SpeciesPage({
     [species],
   );
 
-  const sightingCounts = useMemo(() => {
-    const counts = new Map<string, number>();
+  const sightingGroups = useMemo(() => {
+    const groups = new Map<string, FeedSighting[]>();
     sightings.forEach((sighting) => {
       const key = sightingCatalogKey(sighting);
       if (!key) return;
-      counts.set(key, (counts.get(key) ?? 0) + 1);
+      const current = groups.get(key) ?? [];
+      current.push(sighting);
+      groups.set(key, current);
     });
-    return counts;
+    return groups;
   }, [sightings]);
+
+  const photographedSpecies = useMemo(
+    () => Array.from(sightingGroups.values()).filter((items) => items[0]?.photo_url).length,
+    [sightingGroups],
+  );
 
   const filtered = useMemo(() => {
     const cleanQuery = query.toLowerCase().trim();
@@ -100,7 +118,10 @@ export function SpeciesPage({
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
-  const pageItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const pageItems = useMemo(
+    () => filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [currentPage, filtered, pageSize],
+  );
 
   useEffect(() => {
     setPage(1);
@@ -115,9 +136,8 @@ export function SpeciesPage({
     null;
 
   const selectedKey = selectedSpecies ? catalogBirdKey(selectedSpecies) : null;
-  const selectedSightings = selectedKey
-    ? sightings.filter((sighting) => sightingCatalogKey(sighting) === selectedKey)
-    : [];
+  const selectedSightings = selectedKey ? sightingGroups.get(selectedKey) ?? [] : [];
+  const selectedCoverPhoto = selectedSpecies?.image_url ?? selectedSightings[0]?.photo_url ?? null;
 
   async function handleCreateSpecies(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -165,6 +185,24 @@ export function SpeciesPage({
           <Plus size={16} />
           Sugerir especie
         </button>
+      </section>
+
+      <section className="catalog-snapshot" aria-label="Resumen del catalogo">
+        <div>
+          <Layers size={18} />
+          <strong>{species.length}</strong>
+          <span>especies cargadas</span>
+        </div>
+        <div>
+          <Activity size={18} />
+          <strong>{sightingGroups.size}</strong>
+          <span>con avistamientos</span>
+        </div>
+        <div>
+          <Images size={18} />
+          <strong>{photographedSpecies}</strong>
+          <span>con foto real</span>
+        </div>
       </section>
 
       {formOpen && (
@@ -332,7 +370,10 @@ export function SpeciesPage({
               <div className="species-list">
                 {pageItems.map((item) => {
                   const key = catalogBirdKey(item);
-                  const count = sightingCounts.get(key) ?? 0;
+                  const sightingsForSpecies = sightingGroups.get(key) ?? [];
+                  const count = sightingsForSpecies.length;
+                  const coverPhoto = item.image_url ?? sightingsForSpecies[0]?.photo_url;
+                  const initial = item.common_name.charAt(0).toUpperCase();
                   return (
                     <button
                       className={selectedKey === key ? "species-row is-active" : "species-row"}
@@ -340,9 +381,29 @@ export function SpeciesPage({
                       key={key}
                       onClick={() => onSelectSpecies(key)}
                     >
-                      <span>
+                      <span className={coverPhoto ? "species-thumb has-photo" : "species-thumb"}>
+                        {coverPhoto ? (
+                          <img
+                            src={optimizedStorageImageUrl(coverPhoto, {
+                              width: 160,
+                              height: 160,
+                              quality: 68,
+                              resize: "cover",
+                            })}
+                            alt={item.common_name}
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        ) : (
+                          initial
+                        )}
+                      </span>
+                      <span className="species-row-copy">
                         <strong>{item.common_name}</strong>
                         <em>{item.scientific_name}</em>
+                        <span>
+                          {item.family} - {item.catalog === "birds" ? "Oficial" : "Verificada"}
+                        </span>
                       </span>
                       <small>{count}</small>
                     </button>
@@ -353,6 +414,30 @@ export function SpeciesPage({
               <aside className="detail-panel">
                 {selectedSpecies ? (
                   <>
+                    <div className={selectedCoverPhoto ? "detail-visual has-photo" : "detail-visual"}>
+                      {selectedCoverPhoto ? (
+                        <img
+                          src={optimizedStorageImageUrl(selectedCoverPhoto, {
+                            width: 960,
+                            quality: 74,
+                            resize: "cover",
+                          })}
+                          alt={selectedSpecies.common_name}
+                          loading="eager"
+                          decoding="async"
+                        />
+                      ) : (
+                        <div className="species-visual-fallback">
+                          {selectedSpecies.common_name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="detail-visual-overlay">
+                        <span>
+                          {selectedSpecies.catalog === "birds" ? "Catalogo oficial" : "Verificada"}
+                        </span>
+                        <strong>{selectedSightings.length} avistamientos</strong>
+                      </div>
+                    </div>
                     <div className="detail-heading">
                       <span className="status-badge">
                         {selectedSpecies.catalog === "birds" ? "Oficial" : "Verificada"}
@@ -406,9 +491,15 @@ export function SpeciesPage({
                         selectedSightings.slice(0, 6).map((sighting) => (
                           <figure key={sighting.id}>
                             <img
-                              src={sighting.photo_url}
+                              src={optimizedStorageImageUrl(sighting.photo_url, {
+                                width: 260,
+                                height: 260,
+                                quality: 70,
+                                resize: "cover",
+                              })}
                               alt={selectedSpecies.common_name}
                               loading="lazy"
+                              decoding="async"
                             />
                             <figcaption>{formatDate(sighting.observed_at)}</figcaption>
                           </figure>

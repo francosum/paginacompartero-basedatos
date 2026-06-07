@@ -25,6 +25,9 @@ export interface CatalogBird {
   country_text?: string | null;
   range_text?: string | null;
   habitat?: string | null;
+  image_url?: string | null;
+  image_attribution?: string | null;
+  image_source_url?: string | null;
   is_extinct?: boolean;
   created_at?: string;
 }

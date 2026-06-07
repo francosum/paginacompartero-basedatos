@@ -90,6 +90,19 @@ async function fetchOfficialBirds(client: ComparteroClient) {
   return { rows, available: true };
 }
 
+async function fetchOfficialBirdCount(client: ComparteroClient) {
+  const { count, error } = await client
+    .from("birds")
+    .select("id", { count: "exact", head: true });
+
+  if (error) {
+    if (isMissingSchemaError(error)) return { count: 0, available: false };
+    throw error;
+  }
+
+  return { count: count ?? 0, available: true };
+}
+
 function sightingsSelect(includeOfficialBirds: boolean, includeSaved: boolean) {
   const saved = includeSaved ? ", saved_sightings(*)" : "";
   const official = includeOfficialBirds ? "birds(*)," : "";
@@ -150,23 +163,25 @@ function buildCatalog(
   return [...officialCatalog, ...legacyStillVisible];
 }
 
-export function useComparteroData(userId?: string | null) {
+export function useComparteroData(userId?: string | null, catalogEnabled = false) {
   const [sightings, setSightings] = useState<FeedSighting[]>([]);
   const [species, setSpecies] = useState<CatalogBird[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [stats, setStats] = useState<PlatformStats>(emptyStats);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
 
   const configured = Boolean(supabase);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options?: { forceCatalog?: boolean }) => {
     if (!supabase) {
       setLoading(false);
       setSightings([]);
       setSpecies([]);
       setProfiles([]);
       setStats(emptyStats);
+      setCatalogLoaded(false);
       return;
     }
 
@@ -175,41 +190,52 @@ export function useComparteroData(userId?: string | null) {
 
     try {
       const client = supabase;
+      const shouldFetchCatalog = catalogEnabled && (!catalogLoaded || options?.forceCatalog);
       const [
         sightingsData,
-        officialBirds,
-        legacySpeciesResult,
+        catalogResult,
         profilesResult,
         sightingsCount,
+        officialBirdCount,
         legacySpeciesCount,
         profilesCount,
       ] = await Promise.all([
         fetchSightings(client, userId),
-        fetchOfficialBirds(client),
-        client.from("bird_species").select("*").order("common_name"),
+        shouldFetchCatalog
+          ? Promise.all([
+              fetchOfficialBirds(client),
+              client.from("bird_species").select("*").order("common_name"),
+            ])
+          : Promise.resolve(null),
         client.from("profiles").select("*").order("created_at", { ascending: false }),
         client.from("sightings").select("id", { count: "exact", head: true }),
+        fetchOfficialBirdCount(client),
         client.from("bird_species").select("id", { count: "exact", head: true }),
         client.from("profiles").select("id", { count: "exact", head: true }),
       ]);
 
-      if (legacySpeciesResult.error) throw legacySpeciesResult.error;
       if (profilesResult.error) throw profilesResult.error;
       if (sightingsCount.error) throw sightingsCount.error;
       if (legacySpeciesCount.error) throw legacySpeciesCount.error;
       if (profilesCount.error) throw profilesCount.error;
 
-      const legacySpecies = (legacySpeciesResult.data ?? []) as BirdSpecies[];
-      const catalog = buildCatalog(officialBirds.rows, legacySpecies, sightingsData);
+      if (catalogResult) {
+        const [officialBirds, legacySpeciesResult] = catalogResult;
+        if (legacySpeciesResult.error) throw legacySpeciesResult.error;
+
+        const legacySpecies = (legacySpeciesResult.data ?? []) as BirdSpecies[];
+        const catalog = buildCatalog(officialBirds.rows, legacySpecies, sightingsData);
+        setSpecies(catalog);
+        setCatalogLoaded(true);
+      }
 
       setSightings(sightingsData);
-      setSpecies(catalog);
       setProfiles(profilesResult.data ?? []);
       setStats({
         sightings: sightingsCount.count ?? 0,
         species:
-          officialBirds.available && officialBirds.rows.length > 0
-            ? officialBirds.rows.length
+          officialBirdCount.available && officialBirdCount.count > 0
+            ? officialBirdCount.count
             : legacySpeciesCount.count ?? 0,
         profiles: profilesCount.count ?? 0,
       });
@@ -220,7 +246,7 @@ export function useComparteroData(userId?: string | null) {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [catalogEnabled, catalogLoaded, userId]);
 
   useEffect(() => {
     void refresh();
@@ -283,7 +309,7 @@ export function useComparteroData(userId?: string | null) {
 
     const officialInsert = await supabase.from("birds").insert(officialPayload);
     if (!officialInsert.error) {
-      await refresh();
+      await refresh({ forceCatalog: true });
       return;
     }
 
@@ -291,7 +317,7 @@ export function useComparteroData(userId?: string | null) {
 
     const { error: insertError } = await supabase.from("bird_species").insert(cleanPayload);
     if (insertError) throw insertError;
-    await refresh();
+    await refresh({ forceCatalog: true });
   }, [refresh]);
 
   const createSighting = useCallback(

@@ -14,6 +14,7 @@ import { Avatar } from "./shared/Avatar";
 import type { FeedSighting } from "../types/models";
 import { catalogBirdKey, sightingCatalogBird } from "../utils/birds";
 import { conservationLabel, displayName, formatDate } from "../utils/format";
+import { optimizedStorageImageUrl } from "../utils/images";
 import { useToast } from "../hooks/useToast";
 
 interface SightingCardProps {
@@ -94,7 +95,16 @@ export function SightingCard({
   return (
     <article className="sighting-card" id={`sighting-${sighting.id}`}>
       <div className="sighting-media">
-        <img src={sighting.photo_url} alt={species?.common_name ?? "Avistamiento"} loading="lazy" />
+        <img
+          src={optimizedStorageImageUrl(sighting.photo_url, {
+            width: 820,
+            quality: 72,
+            resize: "cover",
+          })}
+          alt={species?.common_name ?? "Avistamiento"}
+          loading="lazy"
+          decoding="async"
+        />
       </div>
 
       <div className="sighting-body">

@@ -21,10 +21,36 @@ create table if not exists public.birds (
   country_text text,
   range_text text,
   habitat text,
+  image_url text,
+  image_attribution text,
+  image_source_url text,
   is_extinct boolean not null default false,
   created_at timestamptz not null default now(),
   unique (source_taxonomy, source_version, scientific_name)
 );
+
+alter table public.birds
+add column if not exists image_url text;
+
+alter table public.birds
+add column if not exists image_attribution text;
+
+alter table public.birds
+add column if not exists image_source_url text;
+
+alter table public.birds
+drop constraint if exists birds_image_url_check;
+
+alter table public.birds
+add constraint birds_image_url_check
+check (image_url is null or image_url ~* '^https?://');
+
+alter table public.birds
+drop constraint if exists birds_image_source_url_check;
+
+alter table public.birds
+add constraint birds_image_source_url_check
+check (image_source_url is null or image_source_url ~* '^https?://');
 
 create index if not exists idx_birds_common_name on public.birds(common_name);
 create index if not exists idx_birds_scientific_name on public.birds(scientific_name);

@@ -5,6 +5,7 @@ import { Avatar } from "../components/shared/Avatar";
 import type { FeedSighting, Profile } from "../types/models";
 import { catalogBirdKey, sightingCatalogBird } from "../utils/birds";
 import { displayName } from "../utils/format";
+import { optimizedStorageImageUrl } from "../utils/images";
 
 interface RankingPageProps {
   configured: boolean;
@@ -90,7 +91,17 @@ export function RankingPage({
                   onClick={() => bird && onOpenSpecies(catalogBirdKey(bird))}
                 >
                   <span>{index + 1}</span>
-                  <img src={sighting.photo_url} alt={bird?.common_name ?? "Foto"} />
+                  <img
+                    src={optimizedStorageImageUrl(sighting.photo_url, {
+                      width: 160,
+                      height: 160,
+                      quality: 70,
+                      resize: "cover",
+                    })}
+                    alt={bird?.common_name ?? "Foto"}
+                    loading="lazy"
+                    decoding="async"
+                  />
                   <strong>{bird?.common_name ?? "Especie no disponible"}</strong>
                   <small>{count} likes</small>
                 </button>

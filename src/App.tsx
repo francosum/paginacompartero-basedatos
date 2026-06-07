@@ -30,7 +30,8 @@ export default function App() {
   const [selectedSpeciesId, setSelectedSpeciesId] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("compartero-theme") === "dark");
   const auth = useAuth();
-  const data = useComparteroData(auth.user?.id);
+  const needsFullCatalog = view === "publish" || view === "species" || view === "map";
+  const data = useComparteroData(auth.user?.id, needsFullCatalog);
   const { addToast } = useToast();
 
   useEffect(() => {

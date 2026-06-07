@@ -6,6 +6,7 @@ import { EmptyState } from "../components/shared/EmptyState";
 import type { CatalogBird, FeedSighting, Profile } from "../types/models";
 import { catalogBirdKey, sightingCatalogBird, sightingCatalogKey } from "../utils/birds";
 import { displayName, formatDate } from "../utils/format";
+import { optimizedStorageImageUrl } from "../utils/images";
 
 interface MapPageProps {
   configured: boolean;
@@ -145,8 +146,14 @@ function LeafletSightingsMap({
       popup.className = "map-popup";
 
       const image = document.createElement("img");
-      image.src = sighting.photo_url;
+      image.src = optimizedStorageImageUrl(sighting.photo_url, {
+        width: 360,
+        quality: 70,
+        resize: "cover",
+      });
       image.alt = species?.common_name ?? "Avistamiento";
+      image.loading = "lazy";
+      image.decoding = "async";
 
       const title = document.createElement("strong");
       title.textContent = species?.common_name ?? "Especie no disponible";
